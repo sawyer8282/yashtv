@@ -1,0 +1,14 @@
+{
+  "name": "stock-scanner",
+  "version": "1.0.0",
+  "description": "Stock scanner for NIFTY 50, US large caps and custom symbols",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

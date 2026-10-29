@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #121722; --panel-2: #181f2d; --border: #232c3d;
+    --text: #e6eaf2; --muted: #8592a8; --accent: #4f8cff;
+    --up: #22c55e; --down: #ef4444; --warn: #f59e0b;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 Inter, system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: -.3px; display: flex; align-items: center; gap: 8px; }
+  .logo span { color: var(--accent); }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+  select, input, button { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+  input[type=number] { width: 80px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:hover { filter: brightness(1.15); }
+  #customSymbols { width: 260px; }
+  .status { color: var(--muted); font-size: 12px; }
+
+  main { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 62px); }
+  aside { border-right: 1px solid var(--border); padding: 18px; background: var(--panel); }
+  aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 10px; }
+  aside h3:first-child { margin-top: 0; }
+  .presets { display: flex; flex-direction: column; gap: 4px; }
+  .preset { text-align: left; background: transparent; border: 1px solid transparent; display: flex; justify-content: space-between; }
+  .preset.active { background: var(--panel-2); border-color: var(--accent); }
+  .preset .n { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .field { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+  .field input { width: 64px; padding: 5px 7px; }
+  .check { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 13px; }
+
+  section.results { padding: 18px 24px; overflow: auto; }
+  .summary { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; min-width: 120px; }
+  .card .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .card .v { font-size: 20px; font-weight: 600; font-family: var(--mono); }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .toolbar input { flex: 1; max-width: 280px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 9px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--panel-2); cursor: pointer; user-select: none; position: sticky; top: 0; }
+  th.sorted::after { content: ' ▼'; color: var(--accent); }
+  th.sorted.asc::after { content: ' ▲'; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--panel-2); }
+  td { font-family: var(--mono); font-size: 13px; }
+  .sym { font-family: Inter, sans-serif; font-weight: 600; }
+  .sym small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .tag { display: inline-block; font-family: Inter, sans-serif; font-size: 11px; padding: 2px 7px; border-radius: 999px; margin-left: 4px; background: #1e293b; color: #cbd5e1; }
+  .tag.bull { background: rgba(34,197,94,.15); color: var(--up); }
+  .tag.bear { background: rgba(239,68,68,.15); color: var(--down); }
+  .tag.neutral { background: rgba(245,158,11,.15); color: var(--warn); }
+  td.signals { text-align: left; white-space: normal; min-width: 180px; }
+  .rsi-bar { display: inline-block; width: 40px; height: 4px; background: var(--border); border-radius: 2px; vertical-align: middle; margin-left: 6px; position: relative; }
+  .rsi-bar i { position: absolute; top: -2px; width: 3px; height: 8px; border-radius: 1px; }
+  .empty { text-align: center; color: var(--muted); padding: 40px; font-family: Inter; }
+
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(720px, 100vw); background: var(--panel); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform .25s ease; z-index: 10; padding: 22px; overflow-y: auto; box-shadow: -20px 0 40px rgba(0,0,0,.4); }
+  .drawer.open { transform: none; }
+  .drawer .close { position: absolute; top: 16px; right: 16px; }
+  .drawer h2 { margin: 0; font-size: 22px; }
+  .drawer .sub { color: var(--muted); margin-bottom: 14px; }
+  .drawer .price { font-size: 28px; font-weight: 700; font-family: var(--mono); }
+  .ranges { display: flex; gap: 4px; margin: 14px 0 6px; }
+  .ranges button { padding: 4px 10px; font-size: 12px; }
+  .ranges button.active { border-color: var(--accent); color: var(--accent); }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .legend b { display: inline-block; width: 10px; height: 3px; margin-right: 5px; vertical-align: middle; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+  .stats div { background: var(--panel-2); border-radius: 8px; padding: 10px; }
+  .stats .k { color: var(--muted); font-size: 11px; }
+  .stats .v { font-family: var(--mono); font-size: 15px; margin-top: 2px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--muted); border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--border); }
+    header, section.results { padding-left: 16px; padding-right: 16px; }
+    #customSymbols { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">📈 Stock<span>Scanner</span></div>
+  <div class="controls">
+    <select id="universe">
+      <option value="nifty50">NIFTY 50 (India)</option>
+      <option value="us">US Large Caps</option>
+      <option value="custom">Custom symbols…</option>
+    </select>
+    <input id="customSymbols" placeholder="e.g. TATAPOWER.NS, IRCTC.NS, AAPL" hidden>
+    <button class="primary" id="scanBtn">Scan</button>
+    <label class="status"><input type="checkbox" id="autoRefresh"> Auto-refresh 5m</label>
+    <span class="status" id="status"></span>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <h3>Preset scans</h3>
+    <div class="presets" id="presets"></div>
+
+    <h3>Custom filters</h3>
+    <div class="field"><span>Price</span><input type="number" id="fPriceMin" placeholder="min"><input type="number" id="fPriceMax" placeholder="max"></div>
+    <div class="field"><span>Change %</span><input type="number" id="fChgMin" placeholder="min"><input type="number" id="fChgMax" placeholder="max"></div>
+    <div class="field"><span>RSI (14)</span><input type="number" id="fRsiMin" placeholder="min"><input type="number" id="fRsiMax" placeholder="max"></div>
+    <div class="field"><span>Rel. volume ≥</span><input type="number" id="fRelVol" step="0.1" placeholder="x"><span></span></div>
+    <div class="field"><span>Within % of 52W high</span><input type="number" id="fFromHigh" placeholder="%"><span></span></div>
+    <label class="check"><input type="checkbox" id="fAbove50"> Price above SMA 50</label>
+    <label class="check"><input type="checkbox" id="fAbove200"> Price above SMA 200</label>
+    <button id="resetBtn" style="margin-top:8px;width:100%">Reset filters</button>
+  </aside>
+
+  <section class="results">
+    <div class="summary" id="summary"></div>
+    <div class="toolbar">
+      <input id="search" placeholder="Search symbol or name…">
+      <button id="csvBtn">Export CSV</button>
+    </div>
+    <table>
+      <thead><tr id="head"></tr></thead>
+      <tbody id="rows"><tr><td colspan="11" class="empty">Press <b>Scan</b> to load data.</td></tr></tbody>
+    </table>
+  </section>
+</main>
+
+<div class="drawer" id="drawer">
+  <button class="close" id="closeDrawer">✕</button>
+  <div id="drawerBody"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let data = [], failed = [], preset = 'all', sortKey = 'change', sortAsc = false, timer = null;
+
+const PRESETS = [
+  ['all', 'All stocks', () => true],
+  ['gainers', 'Top gainers (>2%)', (r) => r.change > 2],
+  ['losers', 'Top losers (<-2%)', (r) => r.change < -2],
+  ['oversold', 'RSI oversold (<30)', (r) => r.rsi < 30],
+  ['overbought', 'RSI overbought (>70)', (r) => r.rsi > 70],
+  ['volume', 'Volume spike (≥2x)', (r) => r.relVol >= 2],
+  ['high', 'Near 52W high', (r) => r.fromHigh > -2],
+  ['uptrend', 'Strong uptrend', (r) => r.aboveSma50 && r.aboveSma200 && r.sma50 > r.sma200],
+  ['golden', 'Golden cross (10d)', (r) => r.signals.includes('Golden Cross')],
+  ['macd', 'MACD bullish crossover', (r) => r.signals.includes('MACD Bullish')],
+  ['pullback', 'Pullback in uptrend', (r) => r.aboveSma200 && r.rsi < 45 && r.change5d < 0],
+];
+
+const COLS = [
+  ['symbol', 'Symbol'], ['price', 'Price'], ['change', 'Chg %'], ['change5d', '5D %'], ['change1m', '1M %'],
+  ['rsi', 'RSI'], ['relVol', 'Rel Vol'], ['fromHigh', 'From 52WH'], ['trend', 'Trend'], ['signals', 'Signals'], ['spark', '30D'],
+];
+
+const fmt = (n, d = 2) => (n == null || isNaN(n) ? '—' : n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
+const pctCell = (n) => `<span class="${n >= 0 ? 'up' : 'down'}">${n == null ? '—' : (n >= 0 ? '+' : '') + fmt(n)}%</span>`;
+const cur = (c) => ({ INR: '₹', USD: '$', EUR: '€', GBP: '£' }[c] || '');
+const fmtVol = (v) => v >= 1e7 ? fmt(v / 1e6, 1) + 'M' : v >= 1e3 ? fmt(v / 1e3, 0) + 'K' : v;
+const tagClass = (s) => /High|Oversold|Golden|Bullish|Spike/.test(s) && !/Low/.test(s) ? (s === 'Volume Spike' ? 'neutral' : 'bull') : /Bearish|Death|Overbought|Low/.test(s) ? 'bear' : '';
+
+function sparkline(vals) {
+  if (!vals || vals.length < 2) return '';
+  const w = 80, h = 24, min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * w},${h - ((v - min) / span) * h}`).join(' ');
+  const color = vals[vals.length - 1] >= vals[0] ? 'var(--up)' : 'var(--down)';
+  return `<svg width="${w}" height="${h}"><polyline fill="none" stroke="${color}" stroke-width="1.5" points="${pts}"/></svg>`;
+}
+
+function trendTag(r) {
+  if (r.aboveSma50 && r.aboveSma200) return '<span class="tag bull">Bullish</span>';
+  if (!r.aboveSma50 && !r.aboveSma200) return '<span class="tag bear">Bearish</span>';
+  return '<span class="tag neutral">Mixed</span>';
+}
+
+function num(id) { const v = $(id).value; return v === '' ? null : Number(v); }
+
+function filtered() {
+  const presetFn = PRESETS.find((p) => p[0] === preset)[2];
+  const q = $('search').value.trim().toLowerCase();
+  const f = {
+    pMin: num('fPriceMin'), pMax: num('fPriceMax'), cMin: num('fChgMin'), cMax: num('fChgMax'),
+    rMin: num('fRsiMin'), rMax: num('fRsiMax'), rv: num('fRelVol'), fh: num('fFromHigh'),
+  };
+  return data.filter((r) =>
+    presetFn(r) &&
+    (!q || r.symbol.toLowerCase().includes(q) || (r.name || '').toLowerCase().includes(q)) &&
+    (f.pMin == null || r.price >= f.pMin) && (f.pMax == null || r.price <= f.pMax) &&
+    (f.cMin == null || r.change >= f.cMin) && (f.cMax == null || r.change <= f.cMax) &&
+    (f.rMin == null || r.rsi >= f.rMin) && (f.rMax == null || r.rsi <= f.rMax) &&
+    (f.rv == null || r.relVol >= f.rv) && (f.fh == null || r.fromHigh >= -f.fh) &&
+    (!$('fAbove50').checked || r.aboveSma50) && (!$('fAbove200').checked || r.aboveSma200)
+  ).sort((a, b) => {
+    let x = a[sortKey], y = b[sortKey];
+    if (sortKey === 'signals') { x = a.signals.length; y = b.signals.length; }
+    if (sortKey === 'trend') { x = a.aboveSma50 + a.aboveSma200; y = b.aboveSma50 + b.aboveSma200; }
+    if (typeof x === 'string') return sortAsc ? x.localeCompare(y) : y.localeCompare(x);
+    x = x ?? -Infinity; y = y ?? -Infinity;
+    return sortAsc ? x - y : y - x;
+  });
+}
+
+function renderPresets() {
+  $('presets').innerHTML = PRESETS.map(([k, label, fn]) =>
+    `<button class="preset ${k === preset ? 'active' : ''}" data-k="${k}">${label}<span class="n">${data.length ? data.filter(fn).length : ''}</span></button>`
+  ).join('');
+}
+
+function renderHead() {
+  $('head').innerHTML = COLS.map(([k, label]) =>
+    `<th data-k="${k}" class="${k === sortKey ? 'sorted' + (sortAsc ? ' asc' : '') : ''}">${label}</th>`).join('');
+}
+
+function renderSummary() {
+  if (!data.length) { $('summary').innerHTML = ''; return; }
+  const adv = data.filter((r) => r.change > 0).length;
+  const avg = data.reduce((a, r) => a + (r.change || 0), 0) / data.length;
+  const top = [...data].sort((a, b) => b.change - a.change)[0];
+  const bot = [...data].sort((a, b) => a.change - b.change)[0];
+  $('summary').innerHTML = `
+    <div class="card"><div class="k">Scanned</div><div class="v">${data.length}</div></div>
+    <div class="card"><div class="k">Advance / Decline</div><div class="v"><span class="up">${adv}</span> / <span class="down">${data.length - adv}</span></div></div>
+    <div class="card"><div class="k">Avg change</div><div class="v">${pctCell(avg)}</div></div>
+    <div class="card"><div class="k">Top gainer</div><div class="v" style="font-size:15px">${top.symbol.replace('.NS', '')} ${pctCell(top.change)}</div></div>
+    <div class="card"><div class="k">Top loser</div><div class="v" style="font-size:15px">${bot.symbol.replace('.NS', '')} ${pctCell(bot.change)}</div></div>`;
+}
+
+function renderRows() {
+  const rows = filtered();
+  if (!data.length) return;
+  if (!rows.length) { $('rows').innerHTML = `<tr><td colspan="11" class="empty">No stocks match these filters.</td></tr>`; return; }
+  $('rows').innerHTML = rows.map((r) => {
+    const rsiColor = r.rsi < 30 ? 'var(--up)' : r.rsi > 70 ? 'var(--down)' : 'var(--accent)';
+    return `<tr data-s="${r.symbol}">
+      <td class="sym">${r.symbol.replace('.NS', '')}<small>${r.name || ''}</small></td>
+      <td>${cur(r.currency)}${fmt(r.price)}</td>
+      <td>${pctCell(r.change)}</td><td>${pctCell(r.change5d)}</td><td>${pctCell(r.change1m)}</td>
+      <td>${fmt(r.rsi, 1)}<span class="rsi-bar"><i style="left:${Math.min(100, r.rsi || 0) * 0.4 - 1}px;background:${rsiColor}"></i></span></td>
+      <td class="${r.relVol >= 2 ? 'up' : ''}">${fmt(r.relVol)}x</td>
+      <td>${pctCell(r.fromHigh)}</td>
+      <td>${trendTag(r)}</td>
+      <td class="signals">${r.signals.map((s) => `<span class="tag ${tagClass(s)}">${s}</span>`).join('') || '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${sparkline(r.spark)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function render() { renderPresets(); renderHead(); renderSummary(); renderRows(); }
+
+async function scan() {
+  const u = $('universe').value;
+  const qs = new URLSearchParams({ universe: u });
+  if (u === 'custom') {
+    if (!$('customSymbols').value.trim()) { $('status').textContent = 'Enter some symbols first.'; return; }
+    qs.set('symbols', $('customSymbols').value);
+  }
+  $('status').innerHTML = '<span class="spinner"></span> Scanning…';
+  $('scanBtn').disabled = true;
+  try {
+    const res = await fetch('/api/scan?' + qs);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error);
+    data = json.rows; failed = json.failed;
+    $('status').textContent = `Updated ${new Date(json.at).toLocaleTimeString()}` + (failed.length ? ` · ${failed.length} failed: ${failed.join(', ')}` : '');
+    render();
+  } catch (e) {
+    $('status').textContent = 'Error: ' + e.message;
+  } finally {
+    $('scanBtn').disabled = false;
+  }
+}
+
+// ---------- detail drawer ----------
+let hist = null, range = 180;
+
+function chartSvg() {
+  const n = Math.min(range, hist.candles.length);
+  const c = hist.candles.slice(-n), s50 = hist.sma50.slice(-n), s200 = hist.sma200.slice(-n);
+  const W = 670, H = 300, VH = 60, pad = 4;
+  const all = c.flatMap((k) => [k.h, k.l]).concat(s50, s200).filter((v) => v != null);
+  const min = Math.min(...all), max = Math.max(...all), span = max - min || 1;
+  const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
+  const y = (v) => pad + (1 - (v - min) / span) * (H - pad * 2);
+  const line = (arr, color) => `<polyline fill="none" stroke="${color}" stroke-width="1.5" points="${arr.map((v, i) => v == null ? '' : `${x(i)},${y(v)}`).join(' ')}"/>`;
+  const bw = Math.max(1, (W / n) * 0.6);
+  const candles = c.map((k, i) => {
+    const col = k.c >= k.o ? 'var(--up)' : 'var(--down)';
+    return `<line x1="${x(i)}" x2="${x(i)}" y1="${y(k.h)}" y2="${y(k.l)}" stroke="${col}"/>` +
+      `<rect x="${x(i) - bw / 2}" y="${y(Math.max(k.o, k.c))}" width="${bw}" height="${Math.max(1, Math.abs(y(k.o) - y(k.c)))}" fill="${col}"/>`;
+  }).join('');
+  const maxV = Math.max(...c.map((k) => k.v)) || 1;
+  const vols = c.map((k, i) => `<rect x="${x(i) - bw / 2}" y="${H + 10 + VH - (k.v / maxV) * VH}" width="${bw}" height="${(k.v / maxV) * VH}" fill="${k.c >= k.o ? 'var(--up)' : 'var(--down)'}" opacity=".45"/>`).join('');
+  const grid = [0, .25, .5, .75, 1].map((f) => {
+    const v = min + span * f;
+    return `<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border)" stroke-dasharray="2 4"/><text x="${W - 2}" y="${y(v) - 3}" fill="var(--muted)" font-size="10" text-anchor="end">${fmt(v)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H + VH + 14}" width="100%">${grid}${candles}${line(s50, '#f59e0b')}${line(s200, '#a855f7')}${vols}</svg>`;
+}
+
+function renderDrawer(r) {
+  $('drawerBody').innerHTML = `
+    <h2>${r.symbol.replace('.NS', '')}</h2>
+    <div class="sub">${r.name || ''} · ${r.currency}</div>
+    <div class="price">${cur(r.currency)}${fmt(r.price)} <span style="font-size:16px">${pctCell(r.change)}</span></div>
+    <div class="ranges">${[[22, '1M'], [66, '3M'], [130, '6M'], [260, '1Y']].map(([d, l]) => `<button data-r="${d}" class="${d === range ? 'active' : ''}">${l}</button>`).join('')}</div>
+    <div class="legend"><span><b style="background:#f59e0b"></b>SMA 50</span><span><b style="background:#a855f7"></b>SMA 200</span></div>
+    <div id="chart">${hist ? chartSvg() : '<span class="spinner"></span> Loading chart…'}</div>
+    <div class="stats">
+      <div><div class="k">RSI (14)</div><div class="v">${fmt(r.rsi, 1)}</div></div>
+      <div><div class="k">Volume</div><div class="v">${fmtVol(r.volume)} (${fmt(r.relVol)}x)</div></div>
+      <div><div class="k">MACD hist</div><div class="v ${r.macdHist >= 0 ? 'up' : 'down'}">${fmt(r.macdHist)}</div></div>
+      <div><div class="k">SMA 20</div><div class="v">${fmt(r.sma20)}</div></div>
+      <div><div class="k">SMA 50</div><div class="v">${fmt(r.sma50)}</div></div>
+      <div><div class="k">SMA 200</div><div class="v">${fmt(r.sma200)}</div></div>
+      <div><div class="k">52W high</div><div class="v">${fmt(r.hi52)}</div></div>
+      <div><div class="k">52W low</div><div class="v">${fmt(r.lo52)}</div></div>
+      <div><div class="k">From 52W high</div><div class="v">${pctCell(r.fromHigh)}</div></div>
+    </div>
+    <div style="margin-top:14px">${r.signals.map((s) => `<span class="tag ${tagClass(s)}">${s}</span>`).join('')}</div>`;
+  document.querySelectorAll('.ranges button').forEach((b) => b.onclick = () => { range = +b.dataset.r; renderDrawer(r); });
+}
+
+async function openDrawer(symbol) {
+  const r = data.find((d) => d.symbol === symbol);
+  hist = null;
+  $('drawer').classList.add('open');
+  renderDrawer(r);
+  const res = await fetch('/api/history?symbol=' + encodeURIComponent(symbol));
+  hist = await res.json();
+  renderDrawer(r);
+}
+
+function exportCsv() {
+  const rows = filtered();
+  const keys = ['symbol', 'name', 'price', 'change', 'change5d', 'change1m', 'rsi', 'relVol', 'fromHigh', 'sma50', 'sma200'];
+  const csv = [keys.join(',') + ',signals', ...rows.map((r) => keys.map((k) => typeof r[k] === 'number' ? r[k].toFixed(2) : `"${r[k] || ''}"`).join(',') + `,"${r.signals.join('; ')}"`)].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `scan-${preset}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+}
+
+// ---------- events ----------
+$('scanBtn').onclick = scan;
+$('universe').onchange = () => { $('customSymbols').hidden = $('universe').value !== 'custom'; if ($('universe').value !== 'custom') scan(); };
+$('customSymbols').onkeydown = (e) => { if (e.key === 'Enter') scan(); };
+$('presets').onclick = (e) => { const b = e.target.closest('.preset'); if (b) { preset = b.dataset.k; render(); } };
+$('head').onclick = (e) => { const k = e.target.dataset.k; if (!k || k === 'spark') return; sortAsc = sortKey === k ? !sortAsc : k === 'symbol'; sortKey = k; render(); };
+$('rows').onclick = (e) => { const tr = e.target.closest('tr[data-s]'); if (tr) openDrawer(tr.dataset.s); };
+$('closeDrawer').onclick = () => $('drawer').classList.remove('open');
+document.onkeydown = (e) => { if (e.key === 'Escape') $('drawer').classList.remove('open'); };
+document.querySelectorAll('aside input, #search').forEach((el) => el.oninput = renderRows);
+$('resetBtn').onclick = () => { document.querySelectorAll('aside input').forEach((el) => el.type === 'checkbox' ? el.checked = false : el.value = ''); preset = 'all'; render(); };
+$('csvBtn').onclick = exportCsv;
+$('autoRefresh').onchange = () => { clearInterval(timer); if ($('autoRefresh').checked) timer = setInterval(scan, 5 * 60 * 1000); };
+
+render();
+scan();
+</script>
+</body>
+</html>
